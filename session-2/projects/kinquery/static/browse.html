@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kinquery – registry browser</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink:#1f2328; --muted:#656d76; --line:#d0d7de; --bg:#f6f8fa; --hl:#ffd54f; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color:var(--ink); }
+  header { padding:14px 24px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:baseline; }
+  header h1 { margin:0; font-size:18px; } header span, .muted { color:var(--muted); }
+  main { max-width:1300px; margin:0 auto; padding:16px 24px 60px; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  input[type=search] { font:inherit; padding:6px 10px; border:1px solid var(--line); border-radius:6px; width:340px; }
+  .stat { border:1px solid var(--line); border-radius:8px; padding:6px 12px; background:var(--bg); }
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; font-size:13px; }
+  th { position:sticky; top:0; background:#fff; cursor:pointer; }
+  tr.pt { cursor:pointer; } tr.pt:hover { background:var(--bg); }
+  .tag { display:inline-block; border-radius:10px; padding:0 7px; font-size:11px; margin:1px 2px; border:1px solid var(--line); background:var(--bg); white-space:nowrap; }
+  .tag.neg { text-decoration:line-through; color:var(--muted); }
+  .tag.mol { border-color:#bf3989; color:#bf3989; } .tag.clin { border-color:#8250df; color:#8250df; } .tag.gene { border-color:#9a6700; color:#9a6700; }
+  .detail { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:10px 0 16px; }
+  @media (max-width:900px) { .detail { grid-template-columns:1fr; } }
+  svg.ped { width:100%; height:auto; max-height:460px; border:1px solid var(--line); border-radius:8px; }
+  .legend { font-size:12px; color:var(--muted); margin-top:4px; }
+  .legend i { display:inline-block; width:10px; height:10px; margin:0 3px -1px 8px; border:1px solid var(--ink); }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; font-size:11px; max-height:520px; overflow:auto; margin:0; }
+  details summary { cursor:pointer; color:var(--muted); margin:6px 0; }
+  .rel { margin:4px 0; padding:4px 8px; border-left:3px solid var(--line); font-size:12px; }
+  .rel b { color:#8250df; }
+</style>
+</head>
+<body>
+<header><h1>kinquery</h1><span>registry browser — session-2/data/phenopackets.jsonl</span><a href="/" style="margin-left:auto">← cohort finder</a></header>
+<main>
+  <div class="row">
+    <input type="search" id="q" placeholder="filter: id, HPO label, gene, disease, sex, year…">
+    <span class="stat" id="stat"></span>
+    <span class="muted">click a row for pedigree, relatives' records and the raw family JSON</span>
+  </div>
+  <div id="table"></div>
+</main>
+<script src="/static/pedigree.js"></script>
+<script>
+let rows = [], sortKey = 'patient_id', sortDir = 1;
+const cols = [['patient_id','Patient'], ['sex','Sex'], ['birth_year','Born'], ['features','Phenotypes'], ['genes','Genes'], ['diseases','Diagnoses'], ['relatives','Relatives'], ['affected_relatives','Affected rel.']];
+fetch('/api/patients').then(r => r.json()).then(d => { rows = d; render(); });
+document.getElementById('q').oninput = render;
+function hay(p) { return [p.patient_id, p.family_id, p.sex, p.birth_year, ...p.features.map(f => f.id + ' ' + f.label), ...p.genes, ...p.diseases.map(d => d.id + ' ' + d.label)].join(' ').toLowerCase(); }
+function render() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const shown = rows.filter(p => !q || hay(p).includes(q)).sort((a, b) => {
+    let x = a[sortKey], y = b[sortKey]; if (Array.isArray(x)) { x = x.length; y = y.length; }
+    return (x == null) - (y == null) || (x > y) - (x < y) || 0;
+  });
+  if (sortDir < 0) shown.reverse();
+  const stats = {pts: shown.length, nodob: shown.filter(p => !p.birth_year).length, gene: shown.filter(p => p.genes.length).length,
+                 mol: shown.filter(p => p.diseases.some(d => d.evidence === 'molecular')).length, clin: shown.filter(p => p.diseases.some(d => d.evidence === 'clinical')).length,
+                 none: shown.filter(p => !p.genes.length && !p.diseases.length).length};
+  document.getElementById('stat').textContent = `${stats.pts} patients · ${stats.nodob} without DOB · ${stats.gene} with gene finding · ${stats.mol} molecular dx · ${stats.clin} clinical dx · ${stats.none} neither gene nor dx`;
+  document.getElementById('table').innerHTML = `<table><thead><tr>${cols.map(([k, l]) => `<th data-k="${k}">${l}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>` +
+    shown.map((p, i) => `<tr class="pt" data-id="${p.patient_id}"><td><b>${esc(p.patient_id)}</b><br><span class="muted">${esc(p.family_id)}</span></td><td>${esc(p.sex)}</td><td>${p.birth_year ?? '<span class="muted">—</span>'}</td>` +
+      `<td>${p.features.map(f => `<span class="tag ${f.negated ? 'neg' : ''}" title="${esc(f.id)}${f.negated ? ' (negated: examined, absent)' : ''}">${esc(f.label)}</span>`).join('')}</td>` +
+      `<td>${p.genes.map(g => `<span class="tag gene">${esc(g)}</span>`).join('')}</td>` +
+      `<td>${p.diseases.map(d => `<span class="tag ${d.evidence === 'molecular' ? 'mol' : 'clin'}" title="${esc(d.id)}">${esc(d.label)} <span class="muted">${d.evidence}</span></span>`).join('')}</td>` +
+      `<td>${p.relatives}</td><td>${p.affected_relatives}</td></tr><tr hidden><td colspan="8"><div class="detail"></div></td></tr>`).join('') + '</tbody></table>';
+  document.querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : 1; sortKey = k; render(); });
+  document.querySelectorAll('tr.pt').forEach(tr => tr.onclick = () => {
+    const dt = tr.nextElementSibling; dt.hidden = !dt.hidden;
+    if (!dt.hidden && !dt.dataset.done) { dt.dataset.done = 1; detail(tr.dataset.id, dt.querySelector('.detail')); }
+  });
+}
+async function detail(id, el) {
+  const [fam, raw] = await Promise.all([fetch('/api/family/' + id).then(r => r.json()), fetch(`/api/family/${id}/raw`).then(r => r.json())]);
+  const hl = new Map(fam.members.filter(m => !m.is_proband && (m.features.some(f => !f.negated) || m.diseases.length || m.genes.length)).map(m => [m.id, ['affected']]));
+  const rels = fam.members.filter(m => !m.is_proband).sort((a, b) => (a.degree ?? 9) - (b.degree ?? 9)).map(m => {
+    const rec = [...m.features.map(f => (f.negated ? 'NOT ' : '') + f.label), ...m.diseases.map(d => `${d.label} [${d.evidence}]`), ...m.genes.map(g => 'gene ' + g.symbol)];
+    return `<div class="rel"><b>${esc(m.relation)}</b> <span class="muted">${esc(m.id)}${m.birth_year ? ' · b. ' + m.birth_year : ''} · ${esc(m.path)}</span><br>${rec.length ? esc(rec.join('; ')) : '<span class="muted">no recorded findings</span>'}</div>`;
+  }).join('');
+  el.innerHTML = `<div>${pedigreeSVG(fam, hl)}${PED_LEGEND.replace('highlighted', 'relative with a recorded finding')}</div>` +
+    `<div><div class="muted">Relatives (relationship computed from pedigree.persons):</div>${rels}<details><summary>Raw family JSON (${(JSON.stringify(raw).length / 1024).toFixed(0)} KB)</summary><pre>${esc(JSON.stringify(raw, null, 1))}</pre></details></div>`;
+}
+</script>
+</body>
+</html>

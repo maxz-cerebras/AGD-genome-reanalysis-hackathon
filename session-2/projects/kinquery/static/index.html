@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kinquery – cohort finder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --met:#1b7f3b; --unmet:#b3261e; --unknown:#b26a00; --ink:#1f2328; --muted:#656d76; --line:#d0d7de; --bg:#f6f8fa; --hl:#ffd54f; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color:var(--ink); background:#fff; }
+  header { padding:14px 24px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:baseline; }
+  header h1 { margin:0; font-size:18px; } header span { color:var(--muted); }
+  main { max-width:1200px; margin:0 auto; padding:16px 24px 60px; }
+  section { margin-bottom:22px; }
+  h2 { font-size:15px; margin:0 0 8px; display:flex; align-items:center; gap:10px; }
+  h2 .step { background:var(--ink); color:#fff; border-radius:50%; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center; font-size:12px; }
+  textarea { width:100%; min-height:70px; font:inherit; padding:10px; border:1px solid var(--line); border-radius:6px; resize:vertical; }
+  button { font:inherit; padding:7px 14px; border-radius:6px; border:1px solid var(--line); background:var(--bg); cursor:pointer; }
+  button.primary { background:#0969da; color:#fff; border-color:#0969da; }
+  button:disabled { opacity:.5; cursor:default; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+  .chip { border:1px solid var(--line); border-radius:14px; padding:2px 10px; font-size:12px; background:var(--bg); cursor:pointer; }
+  .muted { color:var(--muted); }
+  .card { border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:#fff; }
+  .crit { border-left:4px solid #8250df; background:var(--bg); border-radius:6px; padding:8px 12px; margin:6px 0; }
+  .crit .kind { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  .crit.sex, .crit.birth_year, .crit.age { border-color:#0969da; }
+  .crit.phenotype { border-color:#1a7f37; } .crit.gene { border-color:#9a6700; } .crit.diagnosis { border-color:#bf3989; }
+  .crit.relative { border-color:#8250df; } .crit.not, .crit.all, .crit.any { border-color:#57606a; }
+  .crit .nest { margin:6px 0 0 14px; border-left:1px dashed var(--line); padding-left:10px; }
+  .crit .hd { display:flex; justify-content:space-between; align-items:center; }
+  .crit .tools button { padding:1px 8px; font-size:12px; margin-left:4px; }
+  .crit .body { margin-top:4px; line-height:2; }
+  .crit input[type=number] { width:70px; } .crit input, .crit select { font:inherit; padding:2px 6px; border:1px solid var(--line); border-radius:4px; }
+  .crit .dis { columns:2; font-size:12px; line-height:1.8; } .crit .dis .chip { display:inline-block; margin:1px; }
+  .crit details summary { cursor:pointer; color:var(--muted); font-size:12px; }
+  .palette { display:flex; gap:4px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+  .palette button { padding:2px 9px; font-size:12px; border-left:3px solid #8250df; }
+  .palette .sex, .palette .birth_year, .palette .age { border-left-color:#0969da; } .palette .phenotype { border-left-color:#1a7f37; }
+  .palette .gene { border-left-color:#9a6700; } .palette .diagnosis { border-left-color:#bf3989; } .palette .any, .palette .all, .palette .not { border-left-color:#57606a; }
+  .zone { border:2px solid; border-radius:10px; padding:0 12px 10px; margin:10px 0; }
+  .zone .zh { display:flex; align-items:baseline; gap:10px; margin:0 -12px 8px; padding:8px 14px; border-radius:8px 8px 0 0; color:#fff; font-weight:700; letter-spacing:.06em; }
+  .zone .zh small { font-weight:400; letter-spacing:0; opacity:.9; }
+  .zone.inc { border-color:var(--met); background:#f2faf4; } .zone.inc .zh { background:var(--met); }
+  .zone.exc { border-color:var(--unmet); background:#fdf3f2; } .zone.exc .zh { background:var(--unmet); }
+  .zone.exc .crit { background:#fff; } .zone.inc .crit { background:#fff; }
+  .zone .empty { color:var(--muted); font-style:italic; padding:4px 0; }
+  button.mv.to-exc { color:var(--unmet); border-color:var(--unmet); } button.mv.to-inc { color:var(--met); border-color:var(--met); }
+  .between { text-align:center; color:var(--muted); font-size:12px; margin:-4px 0; }
+  .note { padding:6px 10px; border-radius:6px; margin:4px 0; font-size:13px; }
+  .note.assume { background:#fff8c5; } .note.fix { background:#ddf4ff; } .note.warn { background:#ffebe9; }
+  details.json summary { cursor:pointer; color:var(--muted); }
+  .counts { display:flex; gap:14px; margin:8px 0 12px; }
+  .counts div { padding:10px 16px; border-radius:8px; border:1px solid var(--line); min-width:130px; }
+  .counts b { font-size:22px; display:block; }
+  .tab { border-bottom:2px solid transparent; background:none; border-radius:0; }
+  .tab.active { border-bottom-color:#0969da; font-weight:600; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr.pt { cursor:pointer; } tr.pt:hover { background:var(--bg); }
+  .badge { display:inline-block; padding:1px 8px; border-radius:10px; color:#fff; font-size:11px; margin-right:4px; white-space:nowrap; }
+  .badge.met { background:var(--met); } .badge.unmet { background:var(--unmet); } .badge.unknown { background:var(--unknown); }
+  .st { font-weight:600; } .st.met { color:var(--met); } .st.unmet { color:var(--unmet); } .st.unknown { color:var(--unknown); }
+  .detail { display:grid; grid-template-columns: 1fr 1fr; gap:16px; padding:10px 0 16px; }
+  @media (max-width:900px) { .detail { grid-template-columns:1fr; } }
+  .out { margin:4px 0; padding:6px 10px; border-left:3px solid var(--line); }
+  .out.met { border-color:var(--met); } .out.unmet { border-color:var(--unmet); } .out.unknown { border-color:var(--unknown); }
+  .ev { font-size:12px; margin:2px 0 2px 12px; }
+  .ev code { background:var(--bg); padding:0 4px; border-radius:3px; }
+  .ev .rel { color:#8250df; font-weight:600; }
+  svg.ped { width:100%; height:auto; max-height:460px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .legend { font-size:12px; color:var(--muted); margin-top:4px; }
+  .legend i { display:inline-block; width:10px; height:10px; margin:0 3px -1px 8px; border:1px solid var(--ink); }
+  #err { color:var(--unmet); margin-top:8px; }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:#0969da; border-radius:50%; animation:s 1s linear infinite; vertical-align:middle; }
+  @keyframes s { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<header><h1>kinquery</h1><span>Which patients qualify, and why? — 100 PhenoTips family phenopackets</span>
+  <span style="margin-left:auto;background:#fff8c5;border:1px solid #d4a72c;border-radius:6px;padding:2px 10px;font-size:12px">Synthetic registry data — not clinical evidence</span></header>
+<main>
+
+<section>
+  <h2><span class="step">1</span>Describe the inclusion criteria</h2>
+  <textarea id="text" placeholder="e.g. female, born 1965–2005, with a first- or second-degree relative with breast cancer"></textarea>
+  <div class="row" id="examples"></div>
+  <div class="row">
+    <button class="primary" id="translate">Translate to structured query</button>
+    <label class="muted">model <select id="model"><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option></select></label>
+    <button id="blank" title="skip translation and assemble criteria from blocks">Start from scratch</button>
+    <a href="/browse" class="muted" style="margin-left:auto">browse the registry →</a>
+    <datalist id="genes"></datalist>
+    <span id="tstatus" class="muted"></span>
+  </div>
+  <div id="err"></div>
+</section>
+
+<section id="confirm" hidden>
+  <h2><span class="step">2</span>Confirm the structured query</h2>
+  <div class="card">
+    <p id="interp" style="margin:0 0 8px"></p>
+    <div id="notes"></div>
+    <div id="tree"></div>
+    <details class="json"><summary>Structured query JSON (editable)</summary>
+      <textarea id="json" style="min-height:160px;font-family:ui-monospace,Menlo,monospace;font-size:12px"></textarea>
+      <div class="row"><button id="apply">Apply edited JSON</button><span class="muted" id="jsonerr"></span></div>
+    </details>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="run">Looks right — find patients</button>
+      <span id="rstatus" class="muted"></span>
+    </div>
+  </div>
+</section>
+
+<section id="results" hidden>
+  <h2><span class="step">3</span>Results</h2>
+  <div class="counts" id="counts"></div>
+  <div id="funnel" class="card" style="margin-bottom:10px"></div>
+  <div class="row" style="margin:0 0 6px"><button id="csv">Export matched cohort (CSV)</button></div>
+  <div class="row" style="margin:0 0 6px">
+    <button class="tab active" data-b="matched">Matched</button>
+    <button class="tab" data-b="unassessable">Could not be assessed</button>
+    <button class="tab" data-b="unmatched">Not matched</button>
+  </div>
+  <div id="table"></div>
+</section>
+<section class="card" style="font-size:12px;color:var(--muted)">
+  <b>Limitations (read before trusting a count)</b>
+  <ul style="margin:4px 0 0 18px;padding:0">
+    <li>Cohort = the 100 probands. Relatives ("0", "1", …) are pedigree entries, not patient records; they only provide family history.</li>
+    <li>Age is computed from birth <i>year</i> only (dates are exported at year precision). 20 probands and most relatives have no dateOfBirth → “could not be assessed”, never silently dropped.</li>
+    <li>A <code>genes[]</code> entry is a finding; pathogenicity, zygosity and age at onset are not in the export and cannot be queried.</li>
+    <li>Phenotype matching uses HPO 2024-08-13 subsumption (the release the data was coded with). A relative's cancer recorded only as a MIM/ORDO diagnosis is a diagnosis, not a phenotype.</li>
+    <li>The model only writes the structured query and its restatement; every match, count and evidence line is computed from the file. Model output is validated and grounded; corrections and unresolved terms are shown, not hidden.</li>
+  </ul>
+</section>
+</main>
+
+<script src="/static/pedigree.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+let query = null, results = null, bucket = 'matched';
+
+// ---------- step 1 ----------
+fetch('/api/examples').then(r => r.json()).then(ex => {
+  $('#examples').innerHTML = '<span class="muted">Try:</span>' + ex.map(e => `<span class="chip">${esc(e)}</span>`).join('');
+  document.querySelectorAll('.chip').forEach(c => c.onclick = () => { $('#text').value = c.textContent; });
+});
+
+$('#translate').onclick = async () => {
+  const text = $('#text').value.trim(); if (!text) return;
+  $('#err').textContent = ''; $('#tstatus').innerHTML = '<span class="spin"></span> asking the model…'; $('#translate').disabled = true;
+  $('#results').hidden = true;
+  try {
+    const r = await fetch('/api/translate', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({text, model: $('#model').value})});
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    const t = await r.json();
+    query = t.query;
+    $('#interp').innerHTML = `<b>Model's restatement</b> <span class="muted">(${esc(t.model)}; prose, not evidence — check the blocks below):</span> ${esc(t.interpretation)}`;
+    $('#notes').innerHTML =
+      t.assumptions.map(a => `<div class="note assume">Assumption: ${esc(a)}</div>`).join('') +
+      t.notes.map(a => `<div class="note fix">Grounding: ${esc(a)}</div>`).join('') +
+      t.warnings.map(a => `<div class="note warn">Warning: ${esc(a)}</div>`).join('');
+    showQuery();
+    $('#confirm').hidden = false; $('#confirm').scrollIntoView({behavior:'smooth'});
+  } catch (e) { $('#err').textContent = 'Translation failed: ' + e.message; }
+  $('#tstatus').textContent = ''; $('#translate').disabled = false;
+};
+
+// ---------- step 2: editable criterion blocks ----------
+// Every block is bound to a path inside `query` (e.g. ["criteria",0,"where"]); edits mutate `query` and re-render.
+let vocab = null;
+fetch('/api/vocab').then(r => r.json()).then(v => { vocab = v; $('#genes').innerHTML = Object.keys(v.genes).sort().map(g => `<option value="${g}">`).join(''); });
+const KINDS = {sex:'Sex', birth_year:'Birth year', age:'Age', phenotype:'Phenotype (HPO)', gene:'Gene finding', diagnosis:'Diagnosis', has_record:'Has any record', relative:'Family history', any:'ANY / at least N of…', all:'ALL of…', not:'NOT…'};
+const DEFAULTS = {
+  sex: () => ({kind:'sex', value:'FEMALE'}), birth_year: () => ({kind:'birth_year', min:null, max:null}), age: () => ({kind:'age', min:null, max:null}),
+  phenotype: () => ({kind:'phenotype', term:{id:'', label:''}, include_descendants:true, status:'present'}),
+  gene: () => ({kind:'gene', symbols:[]}), diagnosis: () => ({kind:'diagnosis', terms:null, evidence:['molecular','clinical']}),
+  has_record: () => ({kind:'has_record', of:['phenotype','diagnosis']}),
+  relative: () => ({kind:'relative', degree_min:1, degree_max:2, min_count:1, where:null}),
+  any: () => ({kind:'any', criteria:[]}), all: () => ({kind:'all', criteria:[]}), not: () => ({kind:'not', criterion:{kind:'sex', value:'MALE'}}),
+};
+const P = p => esc(JSON.stringify(p));
+const getAt = p => p.reduce((o, k) => o[k], query);
+const addMenu = (path, label = 'Add:') => `<div class="palette" data-path="${P(path)}"><span class="muted">${label}</span>${Object.entries(KINDS).map(([k, l]) => `<button class="add ${k}" data-kind="${k}">+ ${l}</button>`).join('')}</div>`;
+
+function showQuery() {
+  query.exclusions ||= [];
+  $('#tree').innerHTML =
+    `<div class="zone inc"><div class="zh">✔ INCLUDE <small>— a patient must satisfy ALL of these (reference date ${esc(query.reference_date || 'today')})</small></div>` +
+    (query.criteria.length ? query.criteria.map((c, i) => renderCrit(c, ['criteria', i])).join('') : '<div class="empty">no inclusion criteria yet — everyone qualifies until you add one</div>') +
+    `<div class="row">${addMenu(['criteria'], 'Add inclusion:')}</div></div>` +
+    `<div class="between">and then</div>` +
+    `<div class="zone exc"><div class="zh">✖ EXCLUDE <small>— a patient is removed if ANY of these holds; unknown → “could not be assessed”</small></div>` +
+    (query.exclusions.length ? query.exclusions.map((c, i) => renderCrit(c, ['exclusions', i])).join('') : '<div class="empty">no exclusion criteria</div>') +
+    `<div class="row">${addMenu(['exclusions'], 'Add exclusion:')}</div></div>`;
+  $('#json').value = JSON.stringify(query, null, 2);
+  document.querySelectorAll('.scope').forEach(async el => {
+    const r = await fetch('/api/hpo/term/' + el.dataset.hid);
+    if (r.status === 404) { el.innerHTML = `<span class="st unmet">${esc(el.dataset.hid)} is not in HPO 2024-08-13 — this block matches nobody</span>`; return; }
+    if (!r.ok) { el.innerHTML = `<span class="st unknown">could not load term scope (${r.status})</span>`; return; }
+    const s = await r.json();
+    const terms = s.registry_terms.map(t => `<span class="chip" title="${esc(t.id)}">${esc(t.label)}</span>`).join(' ');
+    el.innerHTML = el.dataset.desc === 'true'
+      ? `Matches the term and its ${s.descendants} HPO descendants. Present in this registry: ${terms || '<i>none</i>'}`
+      : `Exact term only. Present in this registry: ${s.registry_terms.some(t => t.id === s.id) ? `<span class="chip">${esc(s.label)}</span>` : '<i>none</i>'}` +
+        (s.registry_terms.length > 1 ? ` — <span class="st unknown">${s.registry_terms.length - 1} descendant term(s) in the registry would be missed</span>` : '');
+  });
+}
+
+const inp = (path, f, val, type = 'number', extra = '') => `<input class="f" data-path="${P(path)}" data-f="${f}" data-type="${type}" type="${type === 'int' ? 'number' : 'text'}" value="${esc(val ?? '')}" ${extra}>`;
+const sel = (path, f, val, opts, type = 'str') => `<select class="f" data-path="${P(path)}" data-f="${f}" data-type="${type}">${opts.map(([v, l]) => `<option value="${v}" ${String(val ?? '') === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+const chk = (path, f, val, opts) => opts.map(([v, l]) => `<label class="chip"><input type="checkbox" class="f" data-path="${P(path)}" data-f="${f}" data-type="set" value="${v}" ${(val || []).includes(v) ? 'checked' : ''}> ${l}</label>`).join(' ');
+const ROLES = ['parent','mother','father','sibling','sister','brother','half_sibling','child','daughter','son','grandparent','grandchild','aunt_uncle','aunt','uncle','niece_nephew','niece','nephew','cousin'];
+
+function renderCrit(c, path) {
+  const top = path.length === 2;  // direct child of criteria/exclusions
+  const toExc = path[0] === 'criteria';
+  const move = top ? `<button class="mv ${toExc ? 'to-exc' : 'to-inc'}" data-path="${P(path)}" title="move to ${toExc ? 'EXCLUDE' : 'INCLUDE'}">${toExc ? '✖ move to EXCLUDE' : '✔ move to INCLUDE'}</button>` : '';
+  const box = (body, nest = '') => `<div class="crit ${c.kind}" data-path="${P(path)}"><div class="hd"><span class="kind">${esc(KINDS[c.kind] || c.kind)}</span><span class="tools">${move}<button class="del" data-path="${P(path)}" title="remove">×</button></span></div><div class="body">${body}</div>${nest}</div>`;
+  switch (c.kind) {
+    case 'sex': return box(`Sex is ${sel(path, 'value', c.value, [['FEMALE','female'],['MALE','male']])}`);
+    case 'birth_year': return box(`Born between ${inp(path, 'min', c.min, 'int', 'placeholder="any"')} and ${inp(path, 'max', c.max, 'int', 'placeholder="any"')} (inclusive) <span class="muted">· no dateOfBirth → could not be assessed</span>`);
+    case 'age': return box(`Age ≥ ${inp(path, 'min', c.min, 'int', 'placeholder="any"')} and &lt; ${inp(path, 'max', c.max, 'int', 'placeholder="any"')} years <span class="muted">· from birth year only</span>`);
+    case 'phenotype': {
+      const lid = 'dl' + path.join('_');
+      return box(`Patient ${sel(path, 'status', c.status || 'present', [['present','has'],['excluded','was examined and found NOT to have'],['absent','has no record of']])} ` +
+        `<input class="f term" data-path="${P(path)}" data-f="term" data-type="term" list="${lid}" size="44" placeholder="type an HPO label or id…" value="${esc(c.term.id ? `${c.term.id} — ${c.term.label || ''}` : '')}"><datalist id="${lid}"></datalist> ` +
+        `<label class="chip"><input type="checkbox" class="f" data-path="${P(path)}" data-f="include_descendants" data-type="bool" ${c.include_descendants !== false ? 'checked' : ''}> include descendant terms</label>` +
+        (c.term.id ? `<div class="scope muted" data-hid="${esc(c.term.id)}" data-desc="${c.include_descendants !== false}"><span class="spin"></span></div>` : ''));
+    }
+    case 'gene': return box(`Gene finding in any of ${inp(path, 'symbols', c.symbols.join(', '), 'list', `size="30" placeholder="BRCA1, BRCA2" list="genes"`)} <span class="muted">· a finding, not a diagnosis</span>`);
+    case 'diagnosis': {
+      const any = c.terms == null;
+      const list = vocab ? Object.entries(vocab.diseases).sort((a, b) => a[1].localeCompare(b[1])).map(([id, l]) => [id, `${l} <span class="muted">${id}</span>`]) : [];
+      return box(`Has a diagnosis with evidence ${chk(path, 'evidence', c.evidence || ['molecular','clinical'], [['molecular','molecular (MIM:)'],['clinical','clinical (ORDO:)']])} of ` +
+        `<label class="chip"><input type="checkbox" class="f" data-path="${P(path)}" data-f="terms_any" data-type="bool" ${any ? 'checked' : ''}> any disease</label>` +
+        (any ? '' : `<details ${c.terms.length ? '' : 'open'}><summary>${c.terms.length} disease term(s) selected — click to change</summary><div class="dis">${chk(path, 'terms', c.terms.map(t => t.id), list)}</div></details>`));
+    }
+    case 'has_record': return box(`Has any recorded ${chk(path, 'of', c.of, [['phenotype','phenotype'],['diagnosis','diagnosis'],['gene','gene finding']])}`);
+    case 'not': return box(`None of the following:`, `<div class="nest">${renderCrit(c.criterion, [...path, 'criterion'])}</div>`);
+    case 'all': case 'any':
+      return box(c.kind === 'all' ? 'ALL of the following:' : `At least ${inp(path, 'min_count', c.min_count, 'int', 'placeholder="1" style="width:50px"')} of the following:`,
+        `<div class="nest">${c.criteria.map((k, i) => renderCrit(k, [...path, 'criteria', i])).join('')}${c.criteria.length ? '' : '<div class="note warn">add at least one criterion</div>'}<div class="row">${addMenu([...path, 'criteria'])}</div></div>`);
+    case 'relative':
+      return box(`At least ${inp(path, 'min_count', c.min_count ?? 1, 'int', 'style="width:50px"')} ` +
+        `${sel(path, 'sex', c.sex, [['','any sex'],['FEMALE','female'],['MALE','male']], 'opt')} ${sel(path, 'lineage', c.lineage, [['','either side'],['maternal','maternal'],['paternal','paternal']], 'opt')} relative(s), ` +
+        `degree ${inp(path, 'degree_min', c.degree_min ?? 1, 'int', 'style="width:50px"')} to ${inp(path, 'degree_max', c.degree_max, 'int', 'placeholder="any" style="width:50px"')} ` +
+        `<span class="muted">(1 = parent/sibling/child, 2 = grandparent/aunt/uncle/half-sibling, 3 = first cousin)</span>` +
+        `<details ${c.roles ? 'open' : ''}><summary>${c.roles ? 'restricted to roles: ' + c.roles.join(', ') : 'any role — click to restrict'}</summary>${chk(path, 'roles', c.roles || [], ROLES.map(r => [r, r.replace('_', '/')]))}</details>`,
+        `<div class="nest"><div class="muted">who…</div>${c.where ? renderCrit(c.where, [...path, 'where']) : `<div class="row">${addMenu([...path, 'where'], '(any relative) — add a condition')}</div>`}</div>`);
+    default: return box(esc(JSON.stringify(c)));
+  }
+}
+
+// --- editing events (delegated) ---
+$('#tree').addEventListener('change', async e => {
+  const el = e.target;
+  if (!el.classList.contains('f')) return;
+  const path = JSON.parse(el.dataset.path), c = getAt(path), f = el.dataset.f, t = el.dataset.type;
+  if (t === 'int') c[f] = el.value === '' ? null : parseInt(el.value, 10);
+  else if (t === 'opt') c[f] = el.value || null;
+  else if (t === 'bool' && f === 'terms_any') c.terms = el.checked ? null : [];
+  else if (t === 'bool') c[f] = el.checked;
+  else if (t === 'list') c[f] = el.value.split(/[,\s]+/).filter(Boolean).map(s => s.toUpperCase());
+  else if (t === 'set') {
+    const vals = [...el.closest('.body').querySelectorAll(`input[data-f="${f}"]:checked`)].map(i => i.value);
+    if (f === 'terms') c.terms = vals.map(id => ({id, label: vocab.diseases[id]}));
+    else if (f === 'roles') c.roles = vals.length ? vals : null;
+    else c[f] = vals;
+  }
+  else if (t === 'term') {
+    const m = el.value.match(/(HP:\d{7})\s*(?:—\s*(.*))?/);
+    if (m) c.term = {id: m[1], label: m[2] || ''};
+    else if (el.value.trim()) { const hits = await (await fetch('/api/hpo/search?q=' + encodeURIComponent(el.value))).json(); if (hits[0]) c.term = hits[0]; }
+    else c.term = {id: '', label: ''};
+  }
+  else c[f] = el.value;
+  showQuery();
+});
+$('#tree').addEventListener('input', async e => {  // HPO autocomplete
+  const el = e.target; if (!el.classList.contains('term') || el.value.length < 3 || /^HP:/.test(el.value)) return;
+  const hits = await (await fetch('/api/hpo/search?q=' + encodeURIComponent(el.value))).json();
+  document.getElementById(el.getAttribute('list')).innerHTML = hits.map(h => `<option value="${esc(h.id)} — ${esc(h.label)}">`).join('');
+});
+$('#tree').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.classList.contains('add')) {
+    const path = JSON.parse(b.closest('.palette').dataset.path), node = DEFAULTS[b.dataset.kind]();
+    const parent = getAt(path.slice(0, -1)), key = path[path.length - 1];
+    if (Array.isArray(parent[key])) parent[key].push(node); else parent[key] = node;  // list vs relative.where
+    return showQuery();
+  }
+  const path = JSON.parse(b.dataset.path), parent = getAt(path.slice(0, -1)), key = path[path.length - 1];
+  if (b.classList.contains('del')) { if (Array.isArray(parent)) parent.splice(key, 1); else if (key === 'where') parent.where = null; else return; }
+  if (b.classList.contains('mv')) { const [c] = parent.splice(key, 1); query[path[0] === 'criteria' ? 'exclusions' : 'criteria'].push(c); }
+  showQuery();
+});
+$('#apply').onclick = () => {
+  try { query = JSON.parse($('#json').value); $('#jsonerr').textContent = ''; showQuery(); }
+  catch (e) { $('#jsonerr').textContent = e.message; }
+};
+$('#blank').onclick = () => { query = {criteria: [], exclusions: [], reference_date: new Date().toISOString().slice(0, 10)}; $('#interp').textContent = 'Built by hand.'; $('#notes').innerHTML = ''; showQuery(); $('#confirm').hidden = false; };
+
+// ---------- step 3: run ----------
+$('#run').onclick = async () => {
+  $('#rstatus').innerHTML = '<span class="spin"></span>'; $('#run').disabled = true;
+  try {
+    const r = await fetch('/api/search', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({query})});
+    if (!r.ok) throw new Error(JSON.stringify((await r.json()).detail));
+    results = await r.json(); bucket = 'matched'; showResults();
+    $('#results').hidden = false; $('#results').scrollIntoView({behavior:'smooth'});
+  } catch (e) { $('#rstatus').textContent = 'Search failed: ' + e.message; return; }
+  $('#rstatus').textContent = ''; $('#run').disabled = false;
+};
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t)); bucket = t.dataset.b; showTable();
+});
+function showResults() {
+  const c = results.counts, f = results.funnel;
+  $('#counts').innerHTML = `<div><b class="st met">${c.matched}</b>matched</div><div><b class="st unknown">${c.unassessable}</b>could not be assessed</div><div><b class="st unmet">${c.unmatched}</b>not matched</div><div><b>${c.total}</b>patients</div>`;
+  const bar = (n, cls) => `<span style="display:inline-block;width:${Math.round(200 * n / c.total)}px;height:10px;background:var(--${cls});vertical-align:middle;margin-right:6px"></span>`;
+  $('#funnel').innerHTML = `<b>Per-criterion counts</b> <span class="muted">(each criterion evaluated independently over all ${c.total} patients)</span>` +
+    query.criteria.map((q, i) => `<div>${bar(f.inclusion[i], 'met')}${f.inclusion[i]} satisfy <i>${esc(critName(q))}</i></div>`).join('') +
+    (query.exclusions || []).map((q, i) => `<div>${bar(f.exclusion[i], 'unmet')}${f.exclusion[i]} excluded by <i>${esc(critName(q))}</i></div>`).join('');
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.b === 'matched'));
+  showTable();
+}
+$('#csv').onclick = () => {
+  const rows = [['patient_id', 'family_id', 'sex', 'birth_year', 'criterion', 'status', 'summary', 'evidence']];
+  results.matched.forEach(p => [...p.outcomes, ...(p.exclusion_outcomes || []).map(o => ({...o, excl: true}))].forEach(o => {
+    const ev = collectEvidence(o, []).map(e => `${e.relation}: ${e.field} = ${e.value}`).join(' | ');
+    rows.push([p.patient_id, p.family_id, p.sex, p.birth_year ?? '', (o.excl ? 'EXCLUDE ' : '') + critName(o.criterion), o.status, o.summary, ev]);
+  }));
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'})); a.download = 'cohort.csv'; a.click();
+};
+function showTable() {
+  const rows = results[bucket];
+  if (!rows.length) { $('#table').innerHTML = '<p class="muted">none</p>'; return; }
+  $('#table').innerHTML = `<table><thead><tr><th>Patient</th><th>Sex</th><th>Born</th><th>Criteria</th></tr></thead><tbody>` +
+    rows.map((p, i) => `<tr class="pt" data-i="${i}"><td><b>${esc(p.patient_id)}</b><br><span class="muted">${esc(p.family_id)}</span></td><td>${esc(p.sex)}</td><td>${p.birth_year ?? '<span class="st unknown">unknown</span>'}</td><td>${p.outcomes.map(o => `<span class="badge ${o.status}" title="${esc(o.summary)}">${esc(critName(o.criterion))}: ${o.status}</span>`).join('')}${(p.exclusion_outcomes || []).map(o => `<span class="badge ${({met:'unmet',unmet:'met',unknown:'unknown'})[o.status]}" title="${esc(o.summary)}">exclude ${esc(critName(o.criterion))}: ${o.status === 'met' ? 'triggered' : o.status === 'unmet' ? 'clear' : 'unknown'}</span>`).join('')}</td></tr><tr class="dt" hidden><td colspan="4"><div class="detail" id="d${i}"></div></td></tr>`).join('') + '</tbody></table>';
+  document.querySelectorAll('tr.pt').forEach(tr => tr.onclick = () => {
+    const dt = tr.nextElementSibling; dt.hidden = !dt.hidden;
+    if (!dt.hidden && !dt.dataset.done) { dt.dataset.done = 1; showDetail(results[bucket][tr.dataset.i], dt.querySelector('.detail')); }
+  });
+}
+function critName(c) {
+  switch (c.kind) {
+    case 'phenotype': return 'phenotype ' + (c.term?.label || c.term?.id || '');
+    case 'gene': return 'gene ' + (c.symbols || []).join('/');
+    case 'not': return 'NOT ' + critName(c.criterion || {});
+    default: return {sex:'sex', birth_year:'birth year', age:'age', diagnosis:'diagnosis', has_record:'has record', relative:'family history', all:'ALL', any:'ANY'}[c.kind] || c.kind || '?';
+  }
+}
+
+// ---------- detail: outcomes + pedigree ----------
+function collectEvidence(o, acc) { o.evidence.forEach(e => acc.push(e)); o.children.forEach(k => collectEvidence(k, acc)); return acc; }
+function renderOutcome(o, depth = 0) {
+  let html = `<div class="out ${o.status}"><span class="st ${o.status}">${o.status}</span> — ${esc(critName(o.criterion))}: ${esc(o.summary)}`;
+  if (o.relation && o.relation !== 'self' && depth > 0) html = `<div class="out ${o.status}"><span class="rel" style="color:#8250df;font-weight:600">${esc(o.relation)}</span> <span class="st ${o.status}">${o.status}</span> — ${esc(o.summary)}`;
+  html += o.evidence.map(e => `<div class="ev"><span class="rel">${esc(e.relation)}</span> → <code>${esc(e.field)}</code> = ${esc(e.value)}</div>`).join('');
+  if (o.children.length) html += o.children.map(k => renderOutcome(k, depth + 1)).join('');
+  return html + '</div>';
+}
+async function showDetail(p, el) {
+  const exo = p.exclusion_outcomes || [];
+  const ev = [...p.outcomes, ...exo].flatMap(o => collectEvidence(o, []));
+  const hl = new Map(); ev.forEach(e => { if (!hl.has(e.individual)) hl.set(e.individual, []); if (!e.field.startsWith('pedigree')) hl.get(e.individual).push(e.value); });
+  el.innerHTML = `<div><h3 style="margin:4px 0 8px;font-size:14px">Why ${esc(p.patient_id)} is <span class="st ${p.status}">${p.status}</span></h3>${p.outcomes.map(o => renderOutcome(o)).join('')}` +
+    (exo.length ? `<div class="muted" style="margin-top:8px">Exclusions (met = triggered, patient excluded):</div>${exo.map(o => renderOutcome(o)).join('')}` : '') +
+    `</div><div id="ped_${esc(p.patient_id)}"><span class="spin"></span></div>`;
+  const fam = await (await fetch('/api/family/' + p.patient_id)).json();
+  document.getElementById('ped_' + p.patient_id).innerHTML = pedigreeSVG(fam, hl) + PED_LEGEND;
+}
+</script>
+</body>
+</html>

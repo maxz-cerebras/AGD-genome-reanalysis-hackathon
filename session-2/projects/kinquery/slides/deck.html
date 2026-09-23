@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kinquery — Challenge 8</title>
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; font: 20px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #1f2328; }
+  .slide { width: 1280px; height: 720px; padding: 44px 60px 40px; page-break-after: always; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+  .slide:last-child { page-break-after: auto; }
+  h1 { font-size: 34px; margin: 0 0 18px; }
+  h1 small { font-size: 18px; color: #656d76; font-weight: 400; margin-left: 12px; }
+  h2 { font-size: 22px; margin: 14px 0 6px; }
+  ul { margin: 6px 0; padding-left: 24px; } li { margin: 5px 0; }
+  .muted { color: #656d76; }
+  .foot { position: absolute; bottom: 16px; left: 60px; right: 60px; font-size: 13px; color: #656d76; display: flex; justify-content: space-between; border-top: 1px solid #d0d7de; padding-top: 6px; }
+  .cols { display: flex; gap: 32px; flex: 1; min-height: 0; } .cols > div { flex: 1; min-width: 0; }
+  .title { justify-content: center; align-items: center; text-align: center; }
+  .title h1 { font-size: 60px; margin: 0; } .title p { font-size: 26px; margin: 8px 0; }
+  .flow { display: flex; gap: 12px; align-items: stretch; margin: 10px 0 18px; }
+  .flow div { flex: 1; border: 2px solid #d0d7de; border-radius: 10px; padding: 12px 14px; font-size: 17px; }
+  .flow div b { display: block; font-size: 18px; margin-bottom: 4px; }
+  .flow .arrow { flex: 0 0 auto; border: 0; padding: 0; align-self: center; font-size: 28px; color: #656d76; }
+  .inc { border-color: #1b7f3b !important; background: #f2faf4; } .exc { border-color: #b3261e !important; background: #fdf3f2; }
+  .shot { border: 1px solid #d0d7de; border-radius: 8px; object-fit: cover; object-position: top; width: 100%; }
+  .num { font-size: 44px; font-weight: 700; } .met { color: #1b7f3b; } .unk { color: #b26a00; } .unmet { color: #b3261e; }
+  .counts { display: flex; gap: 24px; margin: 4px 0 10px; } .counts div { border: 1px solid #d0d7de; border-radius: 10px; padding: 8px 18px; text-align: center; font-size: 15px; }
+  code { background: #f6f8fa; padding: 0 5px; border-radius: 4px; font-size: 90%; }
+  .badge { display: inline-block; background: #fff8c5; border: 1px solid #d4a72c; border-radius: 6px; padding: 1px 10px; font-size: 14px; }
+  .two { columns: 2; column-gap: 36px; } .two li { break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<section class="slide title">
+  <h1>kinquery</h1>
+  <p>Challenge 8 — Find patients matching trial criteria</p>
+  <p class="muted">Which patients qualify, and why?</p>
+  <p style="margin-top:40px">Team: <b>Jakob</b> &amp; <b>Max</b></p>
+  <div class="foot"><span>AGD genome reanalysis hackathon — session 2</span><span class="badge">synthetic registry data — not clinical evidence</span></div>
+</section>
+
+<section class="slide">
+  <h1>The problem <small>a study coordinator, the afternoon a protocol lands</small></h1>
+  <div class="cols">
+    <div>
+      <p>The PI asks: <i>"how many of our 100 registry families would qualify?"</i> The criteria arrive as prose:</p>
+      <p style="border-left:4px solid #8250df;padding:6px 12px;background:#f6f8fa">"female, born 1965–2005, with a first- or second-degree relative with breast cancer; exclude Li-Fraumeni"</p>
+      <ul>
+        <li><b>The answer is not in the patient record.</b> Family history lives in relatives and the pedigree; degree of relationship is stored nowhere.</li>
+        <li><b>Three things look like "has the disease":</b> a gene finding, a <code>MIM:</code> molecular diagnosis, an <code>ORDO:</code> clinical diagnosis. Trials accept some, not others.</li>
+        <li><b>"Seizures" must match</b> <i>Generalized myoclonic seizure</i> — an ontology question, not a string search.</li>
+        <li><b>20 of 100 probands have no date of birth.</b> An age criterion has to say what it did with them.</li>
+      </ul>
+    </div>
+    <div style="flex:0 0 480px"><img class="shot" src="1-registry-browser.png" style="height:520px"><div class="muted" style="font-size:13px;margin-top:4px">The registry: 100 probands, 529 relatives, one PhenoTips family export per line.</div></div>
+  </div>
+  <div class="foot"><span>Data: session-2/data/phenopackets.jsonl — 100 families, HPO 2024-08-13</span><span>2 / 5</span></div>
+</section>
+
+<section class="slide">
+  <h1>How we addressed it <small>the model writes the question — code computes the answer</small></h1>
+  <div class="flow">
+    <div><b>1 · Plain text</b>Coordinator types the protocol criteria. Haiku or Sonnet translates into a <b>typed query schema</b>.</div>
+    <div class="arrow">→</div>
+    <div><b>2 · Grounding</b>HPO ids checked against HPO 2024-08-13; disease ids against the registry vocabulary. Corrections &amp; unresolved terms shown, not hidden.</div>
+    <div class="arrow">→</div>
+    <div><b>3 · Confirm &amp; edit</b>Criteria as blocks in <span class="inc" style="border:2px solid;border-radius:6px;padding:0 6px">INCLUDE</span> / <span class="exc" style="border:2px solid;border-radius:6px;padding:0 6px">EXCLUDE</span> zones; add, remove, edit graphically or as JSON.</div>
+    <div class="arrow">→</div>
+    <div><b>4 · Match &amp; explain</b>Deterministic matcher: every patient <span class="met">met</span> / <span class="unmet">unmet</span> / <span class="unk">could not be assessed</span>, with the exact fields that decided it.</div>
+  </div>
+  <div class="cols">
+    <div>
+      <h2>Query categories</h2>
+      <ul style="font-size:18px">
+        <li>sex · birth year · age (at a reference date)</li>
+        <li>HPO phenotype — present / explicitly excluded / absent; descendants via the ontology</li>
+        <li>gene finding · diagnosis (molecular and/or clinical)</li>
+        <li>family history — degree, role, lineage, count, nested conditions</li>
+        <li>at-least-N-of · ALL · NOT; inclusion vs exclusion lists</li>
+      </ul>
+    </div>
+    <div>
+      <h2>What is computed, not stored</h2>
+      <ul style="font-size:18px">
+        <li><b>Relationship degree</b> from <code>pedigree.persons</code> parent links: coefficient of relationship → 1st (parent, sibling, child), 2nd (grandparent, aunt, half-sibling), 3rd (first cousin); partners never count.</li>
+        <li><b>Three-valued logic</b>: missing data propagates as <span class="unk">could not be assessed</span>, never as a silent exclusion.</li>
+        <li><b>Evidence</b>: every claim is a JSON path in the file, e.g. <code>relatives[3].phenotypicFeatures[0]</code>, plus the pedigree traversal.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Python · FastAPI · Anthropic API (tool use, validated with a JSON schema) · hp.json</span><span>3 / 5</span></div>
+</section>
+
+<section class="slide">
+  <h1>The result <small>same query, live: 10 matched · 3 could not be assessed · 87 not matched</small></h1>
+  <div class="cols">
+    <div style="flex:0 0 560px"><img class="shot" src="2-structured-query.png" style="height:470px"><div class="muted" style="font-size:13px;margin-top:4px">Structured query as INCLUDE / EXCLUDE blocks, with the model's assumptions listed for confirmation.</div></div>
+    <div><img class="shot" src="3-results-evidence.png" style="height:470px"><div class="muted" style="font-size:13px;margin-top:4px">Funnel: 56 female · 35 born 1965–2005 · 16 with a qualifying relative · 1 excluded. P0003001: mother via <code>→maternalId→ 0</code>, grandmother via <code>→maternalId→ 0 →maternalId→ 3</code>, both highlighted in the pedigree.</div></div>
+  </div>
+  <div class="foot"><span>Probes: 346 HPO descendants of Seizure in scope · P0003005 "no dateOfBirth" → could not be assessed · child &lt;10 + seizures + no molecular dx → 3 matched, 1 unassessable</span><span>4 / 5</span></div>
+</section>
+
+<section class="slide">
+  <h1>Limits, and working with Claude</h1>
+  <div class="cols">
+    <div>
+      <h2>Limits (honest)</h2>
+      <ul style="font-size:18px">
+        <li>Cohort = 100 probands. Relatives are pedigree entries, not patient records.</li>
+        <li>Age from birth <i>year</i> only; most relatives have no DOB.</li>
+        <li>No variant pathogenicity, onset age or treatments in the export — "pathogenic BRCA1 variant" becomes "BRCA1 finding", flagged as an assumption.</li>
+        <li>Synthetic data; 100 families in memory. At scale the matcher needs an index; the pedigree maths does not change.</li>
+      </ul>
+      <img class="shot" src="4-could-not-be-assessed.png" style="height:200px;margin-top:6px">
+    </div>
+    <div>
+      <h2>What Claude got wrong — and how we caught it</h2>
+      <ul style="font-size:18px">
+        <li><b>Hallucinated HPO ids with correct labels.</b> <code>HP:0010582 "Colonic polyposis"</code> is actually <i>Irregular epiphyses</i>; Haiku's <code>HP:0004395 "Colonic polyps"</code> is <i>Malnutrition</i>. Caught by ontology grounding — the label now wins; unresolvable terms are shown with candidates instead of silently used.</li>
+        <li><b>"At least two of A, B, C" approximated as OR</b> (12 matches instead of 3) until the schema could express it. The model itself flagged the shortcut in its assumptions list — that is how we noticed.</li>
+        <li><b>Tool output wrapped under a random key</b> twice; validated against the schema, never trusted.</li>
+        <li><b>Solved the wrong problem first.</b> Claude latched onto the pedigree — relationship maths, drawing, labels — and built a family-relationship tool. We redirected it: the user is a coordinator constructing a <i>cohort</i>; the pedigree is evidence, not the product. Inclusion/exclusion, "at least N of" and the funnel only came after that correction.</li>
+        <li>We verified the Claude-written degree maths on a hand-drawn family (half-aunt = 3rd, first cousin = 3rd, partner = unrelated) before trusting any count.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>session-2/projects/kinquery — README, tests (18), slides</span><span>5 / 5</span></div>
+</section>
+</body>
+</html>
